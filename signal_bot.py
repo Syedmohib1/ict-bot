@@ -8,8 +8,11 @@ import threading
 import os
 from datetime import datetime
 import xml.etree.ElementTree as ET
+import pytz
 
 app = Flask(__name__)
+
+PKT = pytz.timezone("Asia/Karachi")
 
 TELEGRAM_TOKEN = "8209138895:AAEsDG_TmbWS7sz3Xt5g3tZ3pF6bBZf4fgE"
 TELEGRAM_CHAT  = "5329321896"
@@ -30,6 +33,9 @@ FOREX_PAIRS = {
 
 NEWS_ZONE     = False
 NEWS_ZONE_MSG = ""
+
+def pkt_time():
+    return datetime.now(PKT).strftime('%H:%M | %d %b %Y') + " PKT"
 
 def send_telegram(msg):
     try:
@@ -82,12 +88,15 @@ def news_monitor():
                 f"📰 *HIGH IMPACT NEWS!*\n\n"
                 f"⚠️ Trading band karo — 30 min wait karo\n\n"
                 f"📌 {NEWS_ZONE_MSG}\n\n"
-                f"⏰ {datetime.now().strftime('%H:%M | %d %b %Y')}"
+                f"⏰ {pkt_time()}"
             )
             print(f"⚠️ NEWS ZONE: {NEWS_ZONE_MSG}")
             time.sleep(1800)
             NEWS_ZONE = False
-            send_telegram("✅ *News zone clear — Trading resume!*")
+            send_telegram(
+                f"✅ *News zone clear — Trading resume!*\n"
+                f"⏰ {pkt_time()}"
+            )
         time.sleep(300)
 
 def get_candles(exchange, symbol, timeframe="15m", limit=200):
@@ -261,7 +270,7 @@ def analyze(exchange, symbol, exchange_name):
             f"⚖️ R:R: `1:2.5`\n\n"
             f"{get_confidence(long_score)} | Score: {long_score}/15\n\n"
             f"📌 *Confirmations:*\n" + "\n".join(long_reasons) + "\n\n"
-            f"⏰ {datetime.now().strftime('%H:%M | %d %b %Y')}"
+            f"⏰ {pkt_time()}"
         )
         send_telegram(msg)
         print(f"🟢 LONG: {symbol} | {long_score}/15")
@@ -277,7 +286,7 @@ def analyze(exchange, symbol, exchange_name):
             f"⚖️ R:R: `1:2.5`\n\n"
             f"{get_confidence(short_score)} | Score: {short_score}/15\n\n"
             f"📌 *Confirmations:*\n" + "\n".join(short_reasons) + "\n\n"
-            f"⏰ {datetime.now().strftime('%H:%M | %d %b %Y')}"
+            f"⏰ {pkt_time()}"
         )
         send_telegram(msg)
         print(f"🔴 SHORT: {symbol} | {short_score}/15")
@@ -299,11 +308,12 @@ def run_bot():
         "⏱ Scan: har 12 seconds\n"
         "🎯 Score 10+ pe signal\n"
         "📰 News protection ON\n"
-        "⚖️ R:R 1:2.5\n\n"
+        "⚖️ R:R 1:2.5\n"
+        "🕐 Pakistan Time (PKT)\n\n"
         "Signals ka wait karo 📡"
     )
     while True:
-        print(f"\n⏱ Scan: {datetime.now().strftime('%H:%M:%S')}")
+        print(f"\n⏱ Scan: {datetime.now(PKT).strftime('%H:%M:%S')} PKT")
         for exchange_name, exchange in exchanges.items():
             for symbol in CRYPTO_SYMBOLS.get(exchange_name, []):
                 try:

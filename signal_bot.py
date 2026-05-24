@@ -4,8 +4,8 @@ import ccxt
 import pandas as pd
 import time
 import requests
-import json
 import threading
+import os
 from datetime import datetime
 
 app = Flask(__name__)
@@ -33,11 +33,11 @@ def send_telegram(msg):
 def get_candles(exchange, symbol, timeframe="15m", limit=100):
     try:
         bars = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
-        df = pd.DataFrame(bars, columns=["time", "open", "high", "low", "close", "volume"])
+        df = pd.DataFrame(bars, columns=["time","open","high","low","close","volume"])
         df["time"] = pd.to_datetime(df["time"], unit="ms")
         return df
     except Exception as e:
-        print(f"Error fetching {symbol}: {e}")
+        print(f"Error {symbol}: {e}")
         return None
 
 def calc_rsi(df, period=14):
@@ -51,7 +51,7 @@ def analyze(df, symbol, exchange_name):
     if df is None or len(df) < 50:
         return
     df["rsi"] = calc_rsi(df)
-    rsi = df["rsi"].iloc[-1]
+    rsi      = df["rsi"].iloc[-1]
     vol_ma   = df["volume"].rolling(20).mean().iloc[-1]
     high_vol = df["volume"].iloc[-1] > vol_ma * 1.5
     swing_high = df["high"].rolling(50).max().iloc[-1]
@@ -59,15 +59,15 @@ def analyze(df, symbol, exchange_name):
     fib_618    = swing_high - (swing_high - swing_low) * 0.618
     fib_705    = swing_high - (swing_high - swing_low) * 0.705
     close      = df["close"].iloc[-1]
-    near_fib   = abs(close - fib_618) / close < 0.003 or abs(close - fib_705) / close < 0.003
+    near_fib   = abs(close - fib_618)/close < 0.003 or abs(close - fib_705)/close < 0.003
     bull_ob = (df["close"].iloc[-2] < df["open"].iloc[-2] and
                df["close"].iloc[-1] > df["open"].iloc[-1] and
                df["close"].iloc[-1] > df["high"].iloc[-2])
     bear_ob = (df["close"].iloc[-2] > df["open"].iloc[-2] and
                df["close"].iloc[-1] < df["open"].iloc[-1] and
                df["close"].iloc[-1] < df["low"].iloc[-2])
-    bull_fvg = df["low"].iloc[-1] > df["high"].iloc[-3]
-    bear_fvg = df["high"].iloc[-1] < df["low"].iloc[-3]
+    bull_fvg  = df["low"].iloc[-1] > df["high"].iloc[-3]
+    bear_fvg  = df["high"].iloc[-1] < df["low"].iloc[-3]
     prev_high = df["high"].iloc[-20:-1].max()
     prev_low  = df["low"].iloc[-20:-1].min()
     bull_bos  = close > prev_high
@@ -87,11 +87,11 @@ def analyze(df, symbol, exchange_name):
         if bull_bos: reasons.append("✅ BOS confirmed")
         if near_fib: reasons.append("✅ Fib 0.618/0.705")
         reasons.append(f"✅ RSI: {rsi:.1f}")
-        reasons.append(f"✅ High Volume")
+        reasons.append("✅ High Volume")
         msg = (
             f"🟢 *{symbol} — LONG*\n"
             f"📊 {exchange_name}\n\n"
-            f"📍 Entry: `{round(close, 5)}`\n"
+            f"📍 Entry: `{round(close,5)}`\n"
             f"🛡 SL: `{sl_long}`\n"
             f"🎯 TP1: `{tp1_long}`\n"
             f"🎯 TP2: `{tp2_long}`\n\n"
@@ -99,7 +99,7 @@ def analyze(df, symbol, exchange_name):
             f"⏰ {datetime.now().strftime('%H:%M | %d %b %Y')}"
         )
         send_telegram(msg)
-        print(f"LONG: {symbol}")
+        print(f"✅ LONG signal: {symbol}")
 
     elif bear_bos and bear_fvg and rsi > 60 and high_vol:
         reasons = []
@@ -108,11 +108,11 @@ def analyze(df, symbol, exchange_name):
         if bear_bos: reasons.append("✅ BOS confirmed")
         if near_fib: reasons.append("✅ Fib 0.618/0.705")
         reasons.append(f"✅ RSI: {rsi:.1f}")
-        reasons.append(f"✅ High Volume")
+        reasons.append("✅ High Volume")
         msg = (
             f"🔴 *{symbol} — SHORT*\n"
             f"📊 {exchange_name}\n\n"
-            f"📍 Entry: `{round(close, 5)}`\n"
+            f"📍 Entry: `{round(close,5)}`\n"
             f"🛡 SL: `{sl_short}`\n"
             f"🎯 TP1: `{tp1_short}`\n"
             f"🎯 TP2: `{tp2_short}`\n\n"
@@ -120,7 +120,7 @@ def analyze(df, symbol, exchange_name):
             f"⏰ {datetime.now().strftime('%H:%M | %d %b %Y')}"
         )
         send_telegram(msg)
-        print(f"SHORT: {symbol}")
+        print(f"✅ SHORT signal: {symbol}")
     else:
         print(f"No signal: {symbol} | RSI: {rsi:.1f}")
 
@@ -131,6 +131,12 @@ def run_bot():
         "bitget":  ccxt.bitget(),
         "mexc":    ccxt.mexc(),
     }
+    forex_pairs = {
+        "EUR/USD":  "EURUSDT",
+        "GBP/USD":  "GBPUSDT",
+        "XAU/USD":  "XAUUSDT",
+        "GBP/JPY":  "GBPJPY",
+    }
     print("🚀 ICT Signal Bot chal raha hai...")
     send_telegram("🚀 *ICT Signal Bot Start!*\nForex + Crypto monitor ho raha hai 📊")
     while True:
@@ -140,18 +146,13 @@ def run_bot():
                 df = get_candles(exchange, symbol)
                 analyze(df, symbol, exchange_name)
                 time.sleep(1)
-        forex_pairs = {
-            "EUR/USD": "EURUSDT",
-            "GBP/USD": "GBPUSDT",
-            "XAU/USD": "XAUUSDT",
-        }
         for name, pair in forex_pairs.items():
             try:
                 df = get_candles(exchanges["binance"], pair)
                 analyze(df, name, "Binance")
                 time.sleep(1)
-            except:
-                pass
+            except Exception as e:
+                print(f"Forex error {name}: {e}")
         print("✅ Scan complete — 5 min baad...")
         time.sleep(300)
 
@@ -159,8 +160,9 @@ def run_bot():
 def home():
     return "ICT Signal Bot chal raha hai ✅"
 
+bot_thread = threading.Thread(target=run_bot)
+bot_thread.daemon = True
+bot_thread.start()
+
 if __name__ == "__main__":
-    bot_thread = threading.Thread(target=run_bot)
-    bot_thread.daemon = True
-    bot_thread.start()
-    app.run(host="0.0.0.0", port=int(__import__('os').environ.get("PORT", 5000)))
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))

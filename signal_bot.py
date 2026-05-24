@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import ccxt
 import pandas as pd
 import time

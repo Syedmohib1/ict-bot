@@ -1,1 +1,1 @@
-web: python signal_bot.py
+web: gunicorn signal_bot:app

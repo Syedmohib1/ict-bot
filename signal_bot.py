@@ -14,10 +14,17 @@ TELEGRAM_TOKEN = "8209138895:AAEsDG_TmbWS7sz3Xt5g3tZ3pF6bBZf4fgE"
 TELEGRAM_CHAT  = "5329321896"
 
 CRYPTO_SYMBOLS = {
-    "binance": ["BTC/USDT", "ETH/USDT", "XRP/USDT"],
-    "bybit":   ["BTC/USDT", "ETH/USDT"],
-    "bitget":  ["BTC/USDT", "ETH/USDT"],
-    "mexc":    ["BTC/USDT", "ETH/USDT"],
+    "mexc":   ["BTC/USDT", "ETH/USDT", "XRP/USDT", "SOL/USDT"],
+    "bitget": ["BTC/USDT", "ETH/USDT", "XRP/USDT", "SOL/USDT"],
+    "kucoin": ["BTC/USDT", "ETH/USDT", "XRP/USDT", "SOL/USDT"],
+    "okx":    ["BTC/USDT", "ETH/USDT", "XRP/USDT", "SOL/USDT"],
+    "gateio": ["BTC/USDT", "ETH/USDT", "XRP/USDT", "SOL/USDT"],
+}
+
+FOREX_PAIRS = {
+    "EUR/USD": "EUR/USDT",
+    "GBP/USD": "GBP/USDT",
+    "XAU/USD": "XAU/USDT",
 }
 
 def send_telegram(msg):
@@ -51,34 +58,34 @@ def analyze(df, symbol, exchange_name):
     if df is None or len(df) < 50:
         return
     df["rsi"] = calc_rsi(df)
-    rsi      = df["rsi"].iloc[-1]
-    vol_ma   = df["volume"].rolling(20).mean().iloc[-1]
-    high_vol = df["volume"].iloc[-1] > vol_ma * 1.5
+    rsi        = df["rsi"].iloc[-1]
+    vol_ma     = df["volume"].rolling(20).mean().iloc[-1]
+    high_vol   = df["volume"].iloc[-1] > vol_ma * 1.5
     swing_high = df["high"].rolling(50).max().iloc[-1]
     swing_low  = df["low"].rolling(50).min().iloc[-1]
     fib_618    = swing_high - (swing_high - swing_low) * 0.618
     fib_705    = swing_high - (swing_high - swing_low) * 0.705
     close      = df["close"].iloc[-1]
     near_fib   = abs(close - fib_618)/close < 0.003 or abs(close - fib_705)/close < 0.003
-    bull_ob = (df["close"].iloc[-2] < df["open"].iloc[-2] and
-               df["close"].iloc[-1] > df["open"].iloc[-1] and
-               df["close"].iloc[-1] > df["high"].iloc[-2])
-    bear_ob = (df["close"].iloc[-2] > df["open"].iloc[-2] and
-               df["close"].iloc[-1] < df["open"].iloc[-1] and
-               df["close"].iloc[-1] < df["low"].iloc[-2])
-    bull_fvg  = df["low"].iloc[-1] > df["high"].iloc[-3]
-    bear_fvg  = df["high"].iloc[-1] < df["low"].iloc[-3]
-    prev_high = df["high"].iloc[-20:-1].max()
-    prev_low  = df["low"].iloc[-20:-1].min()
-    bull_bos  = close > prev_high
-    bear_bos  = close < prev_low
-    atr       = (df["high"] - df["low"]).rolling(14).mean().iloc[-1]
-    sl_long   = round(close - atr * 1.5, 5)
-    tp1_long  = round(close + atr * 2.0, 5)
-    tp2_long  = round(close + atr * 3.5, 5)
-    sl_short  = round(close + atr * 1.5, 5)
-    tp1_short = round(close - atr * 2.0, 5)
-    tp2_short = round(close - atr * 3.5, 5)
+    bull_ob    = (df["close"].iloc[-2] < df["open"].iloc[-2] and
+                  df["close"].iloc[-1] > df["open"].iloc[-1] and
+                  df["close"].iloc[-1] > df["high"].iloc[-2])
+    bear_ob    = (df["close"].iloc[-2] > df["open"].iloc[-2] and
+                  df["close"].iloc[-1] < df["open"].iloc[-1] and
+                  df["close"].iloc[-1] < df["low"].iloc[-2])
+    bull_fvg   = df["low"].iloc[-1] > df["high"].iloc[-3]
+    bear_fvg   = df["high"].iloc[-1] < df["low"].iloc[-3]
+    prev_high  = df["high"].iloc[-20:-1].max()
+    prev_low   = df["low"].iloc[-20:-1].min()
+    bull_bos   = close > prev_high
+    bear_bos   = close < prev_low
+    atr        = (df["high"] - df["low"]).rolling(14).mean().iloc[-1]
+    sl_long    = round(close - atr * 1.5, 5)
+    tp1_long   = round(close + atr * 2.0, 5)
+    tp2_long   = round(close + atr * 3.5, 5)
+    sl_short   = round(close + atr * 1.5, 5)
+    tp1_short  = round(close - atr * 2.0, 5)
+    tp2_short  = round(close - atr * 3.5, 5)
 
     if bull_bos and bull_fvg and rsi < 40 and high_vol:
         reasons = []
@@ -95,11 +102,11 @@ def analyze(df, symbol, exchange_name):
             f"🛡 SL: `{sl_long}`\n"
             f"🎯 TP1: `{tp1_long}`\n"
             f"🎯 TP2: `{tp2_long}`\n\n"
-            f"📌 *ICT:*\n" + "\n".join(reasons) + "\n\n"
+            f"📌 *ICT Analysis:*\n" + "\n".join(reasons) + "\n\n"
             f"⏰ {datetime.now().strftime('%H:%M | %d %b %Y')}"
         )
         send_telegram(msg)
-        print(f"✅ LONG signal: {symbol}")
+        print(f"✅ LONG: {symbol} | {exchange_name}")
 
     elif bear_bos and bear_fvg and rsi > 60 and high_vol:
         reasons = []
@@ -116,29 +123,24 @@ def analyze(df, symbol, exchange_name):
             f"🛡 SL: `{sl_short}`\n"
             f"🎯 TP1: `{tp1_short}`\n"
             f"🎯 TP2: `{tp2_short}`\n\n"
-            f"📌 *ICT:*\n" + "\n".join(reasons) + "\n\n"
+            f"📌 *ICT Analysis:*\n" + "\n".join(reasons) + "\n\n"
             f"⏰ {datetime.now().strftime('%H:%M | %d %b %Y')}"
         )
         send_telegram(msg)
-        print(f"✅ SHORT signal: {symbol}")
+        print(f"✅ SHORT: {symbol} | {exchange_name}")
     else:
         print(f"No signal: {symbol} | RSI: {rsi:.1f}")
 
 def run_bot():
     exchanges = {
-        "binance": ccxt.binance(),
-        "bybit":   ccxt.bybit(),
-        "bitget":  ccxt.bitget(),
-        "mexc":    ccxt.mexc(),
-    }
-    forex_pairs = {
-        "EUR/USD":  "EURUSDT",
-        "GBP/USD":  "GBPUSDT",
-        "XAU/USD":  "XAUUSDT",
-        "GBP/JPY":  "GBPJPY",
+        "mexc":   ccxt.mexc(),
+        "bitget": ccxt.bitget(),
+        "kucoin": ccxt.kucoin(),
+        "okx":    ccxt.okx(),
+        "gateio": ccxt.gateio(),
     }
     print("🚀 ICT Signal Bot chal raha hai...")
-    send_telegram("🚀 *ICT Signal Bot Start!*\nForex + Crypto monitor ho raha hai 📊")
+    send_telegram("🚀 *ICT Signal Bot Start!*\n5 Exchanges monitor ho rahe hain\nBTC ETH XRP SOL + Forex 📊")
     while True:
         print(f"\n⏱ Scan: {datetime.now().strftime('%H:%M:%S')}")
         for exchange_name, exchange in exchanges.items():
@@ -146,10 +148,11 @@ def run_bot():
                 df = get_candles(exchange, symbol)
                 analyze(df, symbol, exchange_name)
                 time.sleep(1)
-        for name, pair in forex_pairs.items():
+        okx = exchanges["okx"]
+        for name, pair in FOREX_PAIRS.items():
             try:
-                df = get_candles(exchanges["binance"], pair)
-                analyze(df, name, "Binance")
+                df = get_candles(okx, pair)
+                analyze(df, name, "OKX Forex")
                 time.sleep(1)
             except Exception as e:
                 print(f"Forex error {name}: {e}")

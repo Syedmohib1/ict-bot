@@ -1,4 +1,6 @@
 flask
 groq
 requests
-gunicorn
+ccxt
+pandas
+ta

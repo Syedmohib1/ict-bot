@@ -14,8 +14,10 @@ app = Flask(__name__)
 
 PKT = pytz.timezone("Asia/Karachi")
 
-TELEGRAM_TOKEN = "8209138895:AAEsDG_TmbWS7sz3Xt5g3tZ3pF6bBZf4fgE"
-TELEGRAM_CHAT  = "5329321896"
+TELEGRAM_TOKEN  = "8209138895:AAEsDG_TmbWS7sz3Xt5g3tZ3pF6bBZf4fgE"
+TELEGRAM_CHAT   = "5329321896"
+last_news_title = ""
+NEWS_ZONE       = False
 
 CRYPTO_SYMBOLS = {
     "mexc":   ["BTC/USDT", "ETH/USDT", "XRP/USDT", "SOL/USDT"],
@@ -31,8 +33,20 @@ FOREX_PAIRS = {
     "XAU/USD": "XAU/USDT",
 }
 
-NEWS_ZONE     = False
-NEWS_ZONE_MSG = ""
+# News keywords — bullish ya bearish
+BULLISH_NEWS = [
+    "rate cut", "dovish", "stimulus", "gold rally",
+    "dollar falls", "ceasefire", "peace", "recovery",
+    "gdp growth", "jobs growth", "trump tariff removed"
+]
+BEARISH_NEWS = [
+    "rate hike", "hawkish", "inflation surge", "war",
+    "crisis", "sanctions", "nfp miss", "recession",
+    "dollar rises", "fed hike", "tariff", "conflict",
+    "cpi hot", "fomc hike"
+]
+GOLD_BULLISH = ["war", "crisis", "conflict", "sanctions", "inflation", "safe haven"]
+GOLD_BEARISH = ["rate hike", "hawkish", "dollar rises", "fed hike", "strong dollar"]
 
 def pkt_time():
     return datetime.now(PKT).strftime('%H:%M | %d %b %Y') + " PKT"
@@ -47,57 +61,107 @@ def send_telegram(msg):
     except Exception as e:
         print(f"Telegram error: {e}")
 
+def send_news_signal(title, direction, pair, reason):
+    if direction == "LONG":
+        emoji = "🟢"
+        sl_pips = "30 pips / $30"
+        tp_pips = "90 pips / $90"
+        rr = "1:3"
+    else:
+        emoji = "🔴"
+        sl_pips = "30 pips / $30"
+        tp_pips = "90 pips / $90"
+        rr = "1:3"
+
+    msg = (
+        f"📰 *NEWS TRADE SIGNAL!*\n\n"
+        f"{emoji} *{pair} — {direction}*\n\n"
+        f"📌 *News:* {title}\n\n"
+        f"📊 *Trade Setup:*\n"
+        f"⚡ Entry: Market price pe enter karo\n"
+        f"🛡 SL: {sl_pips}\n"
+        f"🎯 TP: {tp_pips}\n"
+        f"⚖️ R:R: `{rr}`\n\n"
+        f"⚠️ *Reason:* {reason}\n\n"
+        f"🔥 HIGH IMPACT — Fast move expected!\n"
+        f"⏰ {pkt_time()}"
+    )
+    send_telegram(msg)
+    print(f"📰 NEWS SIGNAL: {pair} {direction}")
+
 def check_news():
-    global NEWS_ZONE, NEWS_ZONE_MSG
-    keywords = [
-        "fed", "federal reserve", "interest rate", "fomc",
-        "nfp", "non-farm", "cpi", "inflation", "gdp",
-        "trump", "powell", "gold", "xau", "dollar", "usd",
-        "rate decision", "tariff", "sanctions", "war", "crisis"
-    ]
+    global last_news_title, NEWS_ZONE
+
     rss_feeds = [
         "https://feeds.reuters.com/reuters/businessNews",
         "https://feeds.bloomberg.com/markets/news.rss",
     ]
+
+    all_keywords = BULLISH_NEWS + BEARISH_NEWS + GOLD_BULLISH + GOLD_BEARISH
+
     try:
         for feed_url in rss_feeds:
             try:
-                resp = requests.get(feed_url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
+                resp = requests.get(
+                    feed_url, timeout=8,
+                    headers={"User-Agent": "Mozilla/5.0"}
+                )
                 root = ET.fromstring(resp.content)
                 for item in root.iter("item"):
                     title = item.find("title")
                     if title is not None and title.text:
-                        for kw in keywords:
-                            if kw in title.text.lower():
-                                NEWS_ZONE     = True
-                                NEWS_ZONE_MSG = title.text
-                                return
+                        t = title.text.lower()
+
+                        # Sirf nayi news pe
+                        if title.text == last_news_title:
+                            return
+
+                        for kw in all_keywords:
+                            if kw in t:
+                                last_news_title = title.text
+
+                                # Gold signals
+                                for gk in GOLD_BULLISH:
+                                    if gk in t:
+                                        send_news_signal(
+                                            title.text, "LONG", "XAU/USD (Gold)",
+                                            "War/Crisis/Inflation = Gold pumps 🚀"
+                                        )
+                                        return
+
+                                for gk in GOLD_BEARISH:
+                                    if gk in t:
+                                        send_news_signal(
+                                            title.text, "SHORT", "XAU/USD (Gold)",
+                                            "Strong Dollar/Rate Hike = Gold dumps 📉"
+                                        )
+                                        return
+
+                                # Forex signals
+                                for bk in BULLISH_NEWS:
+                                    if bk in t:
+                                        send_news_signal(
+                                            title.text, "LONG", "GBP/USD & EUR/USD",
+                                            "Dollar weakness expected 📉"
+                                        )
+                                        return
+
+                                for bk in BEARISH_NEWS:
+                                    if bk in t:
+                                        send_news_signal(
+                                            title.text, "SHORT", "GBP/USD & EUR/USD",
+                                            "Dollar strength expected 📈"
+                                        )
+                                        return
             except:
                 continue
-        NEWS_ZONE     = False
-        NEWS_ZONE_MSG = ""
     except Exception as e:
         print(f"News error: {e}")
 
 def news_monitor():
-    global NEWS_ZONE
     while True:
         check_news()
-        if NEWS_ZONE:
-            send_telegram(
-                f"📰 *HIGH IMPACT NEWS!*\n\n"
-                f"⚠️ Trading band karo — 30 min wait karo\n\n"
-                f"📌 {NEWS_ZONE_MSG}\n\n"
-                f"⏰ {pkt_time()}"
-            )
-            print(f"⚠️ NEWS ZONE: {NEWS_ZONE_MSG}")
-            time.sleep(1800)
-            NEWS_ZONE = False
-            send_telegram(
-                f"✅ *News zone clear — Trading resume!*\n"
-                f"⏰ {pkt_time()}"
-            )
-        time.sleep(300)
+        time.sleep(60)  # Har 1 min news check
 
 def get_candles(exchange, symbol, timeframe="15m", limit=200):
     try:
@@ -137,12 +201,6 @@ def get_htf_bias(df_1h):
     return "NEUTRAL"
 
 def analyze(exchange, symbol, exchange_name):
-    global NEWS_ZONE
-
-    if NEWS_ZONE:
-        print(f"⚠️ NEWS ZONE — skip {symbol}")
-        return
-
     df = get_candles(exchange, symbol)
     if df is None or len(df) < 100:
         return
@@ -168,10 +226,10 @@ def analyze(exchange, symbol, exchange_name):
 
     swing_high    = df["high"].rolling(100).max().iloc[-1]
     swing_low     = df["low"].rolling(100).min().iloc[-1]
-    fib_382       = swing_high - (swing_high - swing_low) * 0.382
-    fib_500       = swing_high - (swing_high - swing_low) * 0.500
     fib_618       = swing_high - (swing_high - swing_low) * 0.618
     fib_705       = swing_high - (swing_high - swing_low) * 0.705
+    fib_382       = swing_high - (swing_high - swing_low) * 0.382
+    fib_500       = swing_high - (swing_high - swing_low) * 0.500
     close         = df["close"].iloc[-1]
     near_fib_buy  = fib_618 * 0.997 <= close <= fib_705 * 1.003
     near_fib_sell = fib_382 * 0.997 <= close <= fib_500 * 1.003
@@ -307,9 +365,9 @@ def run_bot():
         "📊 5 Exchanges\n"
         "⏱ Scan: har 12 seconds\n"
         "🎯 Score 10+ pe signal\n"
-        "📰 News protection ON\n"
-        "⚖️ R:R 1:2.5\n"
-        "🕐 Pakistan Time (PKT)\n\n"
+        "📰 News = Trade signal!\n"
+        "⚖️ R:R 1:2.5 — 1:3\n"
+        "🕐 Pakistan Time\n\n"
         "Signals ka wait karo 📡"
     )
     while True:

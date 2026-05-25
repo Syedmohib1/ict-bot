@@ -112,6 +112,31 @@ def send_news_signal(title, direction, pair, reason):
     send_telegram(msg)
     print(f"📰 NEWS SIGNAL: {pair} {direction}")
 
+def cache_news():
+    global last_news_title
+    rss_feeds = [
+        "https://feeds.reuters.com/reuters/businessNews",
+        "https://feeds.bloomberg.com/markets/news.rss",
+    ]
+    try:
+        for feed_url in rss_feeds:
+            try:
+                resp = requests.get(
+                    feed_url, timeout=8,
+                    headers={"User-Agent": "Mozilla/5.0"}
+                )
+                root = ET.fromstring(resp.content)
+                for item in root.iter("item"):
+                    title = item.find("title")
+                    if title is not None and title.text:
+                        last_news_title = title.text
+                        print(f"📰 News cached: {title.text[:60]}")
+                        return
+            except:
+                continue
+    except Exception as e:
+        print(f"Cache error: {e}")
+
 def check_news():
     global last_news_title
     rss_feeds = [
@@ -174,6 +199,11 @@ def check_news():
         print(f"News error: {e}")
 
 def news_monitor():
+    # Start pe pehle news cache karo — purani news pe signal nahi
+    print("📰 News cache ho rahi hai — 2 min wait...")
+    cache_news()
+    time.sleep(120)
+    print("✅ News cache complete — monitoring shuru!")
     while True:
         check_news()
         time.sleep(60)

@@ -75,7 +75,6 @@ def get_live_price(pair):
 def send_news_signal(title, direction, pair, reason):
     price = get_live_price(pair)
     emoji = "🟢" if direction == "LONG" else "🔴"
-
     if price:
         if direction == "LONG":
             sl  = round(price - (price * 0.003), 2)
@@ -85,7 +84,6 @@ def send_news_signal(title, direction, pair, reason):
             sl  = round(price + (price * 0.003), 2)
             tp1 = round(price - (price * 0.005), 2)
             tp2 = round(price - (price * 0.009), 2)
-
         msg = (
             f"📰 *NEWS TRADE SIGNAL!*\n\n"
             f"{emoji} *{pair} — {direction}*\n\n"
@@ -295,9 +293,9 @@ def analyze(exchange, symbol, exchange_name):
         long_score += 1; long_reasons.append("✅ FVG present")
     if near_fib_buy:
         long_score += 2; long_reasons.append("✅ Fib 0.618-0.705")
-    if rsi < 35:
+    if 20 <= rsi <= 30:
         long_score += 2; long_reasons.append(f"✅ RSI Oversold: {rsi:.1f}")
-    elif rsi < 45:
+    elif rsi < 40:
         long_score += 1; long_reasons.append(f"✅ RSI Discount: {rsi:.1f}")
     if bull_div:
         long_score += 2; long_reasons.append("✅ Bullish Divergence")
@@ -318,9 +316,9 @@ def analyze(exchange, symbol, exchange_name):
         short_score += 1; short_reasons.append("✅ FVG present")
     if near_fib_sell:
         short_score += 2; short_reasons.append("✅ Fib 0.382-0.5")
-    if rsi > 65:
+    if 70 <= rsi <= 80:
         short_score += 2; short_reasons.append(f"✅ RSI Overbought: {rsi:.1f}")
-    elif rsi > 55:
+    elif rsi > 60:
         short_score += 1; short_reasons.append(f"✅ RSI Premium: {rsi:.1f}")
     if bear_div:
         short_score += 2; short_reasons.append("✅ Bearish Divergence")
@@ -383,6 +381,8 @@ def run_bot():
         "⏱ Scan: har 12 seconds\n"
         "🎯 Score 10+ pe signal\n"
         "📰 News = Trade signal!\n"
+        "📉 RSI Oversold: 20-30\n"
+        "📈 RSI Overbought: 70-80\n"
         "⚖️ R:R 1:2.5 — 1:3\n"
         "🕐 Pakistan Time\n\n"
         "Signals ka wait karo 📡"

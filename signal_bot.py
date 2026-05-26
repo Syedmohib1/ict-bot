@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from flask import Flask
 import ccxt
+import yfinance as yf
 import pandas as pd
 import time
 import requests
@@ -15,7 +16,6 @@ PKT = pytz.timezone("Asia/Karachi")
 TELEGRAM_TOKEN = "8209138895:AAEsDG_TmbWS7sz3Xt5g3tZ3pF6bBZf4fgE"
 TELEGRAM_CHAT  = "5329321896"
 
-# Crypto — in sab pe available hain
 CRYPTO_SYMBOLS = {
     "mexc":   ["BTC/USDT", "ETH/USDT", "XRP/USDT", "SOL/USDT"],
     "bitget": ["BTC/USDT", "ETH/USDT", "XRP/USDT", "SOL/USDT"],
@@ -24,11 +24,14 @@ CRYPTO_SYMBOLS = {
     "gateio": ["BTC/USDT", "ETH/USDT", "XRP/USDT", "SOL/USDT"],
 }
 
-# Forex + Gold — exchange ke sath
+# yfinance symbols
 FOREX_SYMBOLS = {
-    "XAU/USDT": "mexc",    # Gold — MEXC pe available
-    "GBP/USDT": "kucoin",  # GBP — KuCoin pe available
-    "EUR/USDT": "kucoin",  # EUR — KuCoin pe available
+    "XAU/USD": "GC=F",      # Gold Futures
+    "GBP/USD": "GBPUSD=X",  # GBP/USD
+    "EUR/USD": "EURUSD=X",  # EUR/USD
+    "GBP/JPY": "GBPJPY=X",  # GBP/JPY
+    "NAS100":  "NQ=F",       # Nasdaq Futures
+    "US30":    "YM=F",       # Dow Jones Futures
 }
 
 def pkt_time():
@@ -43,6 +46,39 @@ def send_telegram(msg):
         )
     except Exception as e:
         print(f"Telegram error: {e}")
+
+def get_candles_yf(ticker_symbol, timeframe="15m", limit=200):
+    try:
+        ticker = yf.Ticker(ticker_symbol)
+        df = ticker.history(period="5d", interval=timeframe)
+        if df is None or len(df) < 50:
+            return None
+        df = df.rename(columns={
+            "Open": "open", "High": "high",
+            "Low": "low", "Close": "close", "Volume": "volume"
+        })
+        df = df[["open", "high", "low", "close", "volume"]].tail(limit)
+        df = df.reset_index(drop=True)
+        return df
+    except Exception as e:
+        print(f"YF error {ticker_symbol}: {e}")
+        return None
+
+def get_candles_yf_1h(ticker_symbol):
+    try:
+        ticker = yf.Ticker(ticker_symbol)
+        df = ticker.history(period="7d", interval="1h")
+        if df is None or len(df) < 50:
+            return None
+        df = df.rename(columns={
+            "Open": "open", "High": "high",
+            "Low": "low", "Close": "close", "Volume": "volume"
+        })
+        df = df[["open", "high", "low", "close", "volume"]].tail(100)
+        df = df.reset_index(drop=True)
+        return df
+    except:
+        return None
 
 def get_candles(exchange, symbol, timeframe="15m", limit=200):
     try:
@@ -82,14 +118,11 @@ def get_htf_bias(df_1h):
         return "BEARISH"
     return "NEUTRAL"
 
-def analyze(exchange, symbol, exchange_name):
-    df = get_candles(exchange, symbol)
+def run_analysis(df, df_1h, symbol, exchange_name):
     if df is None or len(df) < 100:
         return
 
-    df_1h    = get_candles_1h(exchange, symbol)
     htf_bias = get_htf_bias(df_1h)
-
     if htf_bias == "NEUTRAL":
         print(f"↔️ Neutral — skip {symbol}")
         return
@@ -103,7 +136,7 @@ def analyze(exchange, symbol, exchange_name):
                 df["rsi"].iloc[-1]   < df["rsi"].iloc[-5])
 
     vol_ma    = df["volume"].rolling(20).mean().iloc[-1]
-    vol_ratio = df["volume"].iloc[-1] / vol_ma
+    vol_ratio = df["volume"].iloc[-1] / vol_ma if vol_ma > 0 else 1
     high_vol  = vol_ratio > 2.0
 
     swing_high    = df["high"].rolling(100).max().iloc[-1]
@@ -215,7 +248,7 @@ def analyze(exchange, symbol, exchange_name):
             f"⏰ {pkt_time()}"
         )
         send_telegram(msg)
-        print(f"🟢 BUY: {symbol} | {entry_long} | SL:{sl_long} TP1:{tp1_long} | {long_score}/15")
+        print(f"🟢 BUY: {symbol} | {entry_long} | SL:{sl_long} | {long_score}/15")
 
     elif short_score >= 10 and htf_bias == "BEARISH" and not bull_bos:
         msg = (
@@ -231,7 +264,7 @@ def analyze(exchange, symbol, exchange_name):
             f"⏰ {pkt_time()}"
         )
         send_telegram(msg)
-        print(f"🔴 SELL: {symbol} | {entry_short} | SL:{sl_short} TP1:{tp1_short} | {short_score}/15")
+        print(f"🔴 SELL: {symbol} | {entry_short} | SL:{sl_short} | {short_score}/15")
     else:
         print(f"No signal: {symbol} | L:{long_score} S:{short_score} | RSI:{rsi:.1f}")
 
@@ -247,12 +280,12 @@ def run_bot():
     print("🚀 ICT Signal Bot chal raha hai...")
     send_telegram(
         "🚀 *ICT Signal Bot Start!*\n\n"
-        "📊 Crypto: MEXC, Bitget, KuCoin, OKX, Gate.io\n"
-        "💰 Gold: XAU/USDT — MEXC\n"
-        "💱 Forex: GBP, EUR — KuCoin\n"
+        "📊 Crypto: 5 Exchanges\n"
+        "💰 Gold: XAU/USD\n"
+        "💱 Forex: GBP/USD, EUR/USD, GBP/JPY\n"
+        "📈 Indices: NAS100, US30\n"
         "⏱ Scan: har 12 seconds\n"
         "🎯 Score 10+ pe signal\n"
-        "📉 RSI: 20-30 buy | 70-80 sell\n"
         "⚖️ R:R 1:2.5\n"
         "🕐 Pakistan Time\n\n"
         "Signals ka wait karo 📡"
@@ -265,21 +298,23 @@ def run_bot():
         for exchange_name, exchange in exchanges.items():
             for symbol in CRYPTO_SYMBOLS.get(exchange_name, []):
                 try:
-                    analyze(exchange, symbol, exchange_name)
+                    df    = get_candles(exchange, symbol)
+                    df_1h = get_candles_1h(exchange, symbol)
+                    run_analysis(df, df_1h, symbol, exchange_name.upper())
                     time.sleep(0.2)
                 except Exception as e:
                     print(f"Error {symbol}: {e}")
                     time.sleep(0.2)
 
-        # Forex + Gold scan
-        for symbol, exchange_name in FOREX_SYMBOLS.items():
+        # Forex + Gold + Indices scan — yfinance se
+        for name, yf_symbol in FOREX_SYMBOLS.items():
             try:
-                exchange = exchanges[exchange_name]
-                label = symbol.replace("/USDT", "/USD")
-                analyze(exchange, symbol, f"{exchange_name.upper()} | {label}")
-                time.sleep(0.2)
+                df    = get_candles_yf(yf_symbol, "15m")
+                df_1h = get_candles_yf_1h(yf_symbol)
+                run_analysis(df, df_1h, name, "Yahoo Finance")
+                time.sleep(0.5)
             except Exception as e:
-                print(f"Forex error {symbol}: {e}")
+                print(f"Forex error {name}: {e}")
                 time.sleep(0.2)
 
         print("✅ Scan complete — 12 sec baad...")

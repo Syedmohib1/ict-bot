@@ -7,16 +7,14 @@ import requests
 import threading
 import os
 from datetime import datetime
-import xml.etree.ElementTree as ET
 import pytz
 
 app = Flask(__name__)
 
 PKT = pytz.timezone("Asia/Karachi")
 
-TELEGRAM_TOKEN  = "8209138895:AAEsDG_TmbWS7sz3Xt5g3tZ3pF6bBZf4fgE"
-TELEGRAM_CHAT   = "5329321896"
-last_news_title = ""
+TELEGRAM_TOKEN = "8209138895:AAEsDG_TmbWS7sz3Xt5g3tZ3pF6bBZf4fgE"
+TELEGRAM_CHAT  = "5329321896"
 
 CRYPTO_SYMBOLS = {
     "mexc":   ["BTC/USDT", "ETH/USDT", "XRP/USDT", "SOL/USDT"],
@@ -32,20 +30,6 @@ FOREX_PAIRS = {
     "XAU/USD": "XAU/USDT",
 }
 
-BULLISH_NEWS = [
-    "rate cut", "dovish", "stimulus", "gold rally",
-    "dollar falls", "ceasefire", "peace", "recovery",
-    "gdp growth", "jobs growth", "trump tariff removed"
-]
-BEARISH_NEWS = [
-    "rate hike", "hawkish", "inflation surge",
-    "crisis", "sanctions", "nfp miss", "recession",
-    "dollar rises", "fed hike", "tariff", "conflict",
-    "cpi hot", "fomc hike"
-]
-GOLD_BULLISH = ["war", "crisis", "conflict", "sanctions", "inflation", "safe haven", "iran", "russia"]
-GOLD_BEARISH = ["rate hike", "hawkish", "dollar rises", "fed hike", "strong dollar"]
-
 def pkt_time():
     return datetime.now(PKT).strftime('%I:%M %p | %d %b %Y') + " PKT"
 
@@ -58,155 +42,6 @@ def send_telegram(msg):
         )
     except Exception as e:
         print(f"Telegram error: {e}")
-
-def get_live_price(pair):
-    try:
-        exchange   = ccxt.okx()
-        symbol_map = {
-            "XAU/USD (Gold)":    "XAU/USDT",
-            "GBP/USD & EUR/USD": "GBP/USDT",
-        }
-        symbol = symbol_map.get(pair, "XAU/USDT")
-        ticker = exchange.fetch_ticker(symbol)
-        return ticker["last"]
-    except:
-        return None
-
-def send_news_signal(title, direction, pair, reason):
-    price = get_live_price(pair)
-    emoji = "🟢" if direction == "LONG" else "🔴"
-    if price:
-        if direction == "LONG":
-            sl  = round(price - (price * 0.003), 2)
-            tp1 = round(price + (price * 0.005), 2)
-            tp2 = round(price + (price * 0.009), 2)
-        else:
-            sl  = round(price + (price * 0.003), 2)
-            tp1 = round(price - (price * 0.005), 2)
-            tp2 = round(price - (price * 0.009), 2)
-        msg = (
-            f"📰 *NEWS TRADE SIGNAL!*\n\n"
-            f"{emoji} *{pair} — {direction}*\n\n"
-            f"📌 *News:* {title}\n\n"
-            f"📊 *Trade Setup:*\n"
-            f"📍 Entry: `{price}`\n"
-            f"🛡 SL: `{sl}`\n"
-            f"🎯 TP1: `{tp1}`\n"
-            f"🎯 TP2: `{tp2}`\n"
-            f"⚖️ R:R: `1:3`\n\n"
-            f"⚠️ *Reason:* {reason}\n\n"
-            f"🔥 HIGH IMPACT — Fast move expected!\n"
-            f"⏰ {pkt_time()}"
-        )
-    else:
-        msg = (
-            f"📰 *NEWS TRADE SIGNAL!*\n\n"
-            f"{emoji} *{pair} — {direction}*\n\n"
-            f"📌 *News:* {title}\n\n"
-            f"⚡ Market price pe enter karo\n"
-            f"⚖️ R:R: `1:3`\n\n"
-            f"⚠️ *Reason:* {reason}\n\n"
-            f"🔥 HIGH IMPACT!\n"
-            f"⏰ {pkt_time()}"
-        )
-    send_telegram(msg)
-    print(f"📰 NEWS SIGNAL: {pair} {direction}")
-
-def cache_news():
-    global last_news_title
-    rss_feeds = [
-        "https://feeds.reuters.com/reuters/businessNews",
-        "https://feeds.bloomberg.com/markets/news.rss",
-    ]
-    try:
-        for feed_url in rss_feeds:
-            try:
-                resp = requests.get(
-                    feed_url, timeout=8,
-                    headers={"User-Agent": "Mozilla/5.0"}
-                )
-                root = ET.fromstring(resp.content)
-                for item in root.iter("item"):
-                    title = item.find("title")
-                    if title is not None and title.text:
-                        last_news_title = title.text
-                        print(f"📰 News cached: {title.text[:60]}")
-                        return
-            except:
-                continue
-    except Exception as e:
-        print(f"Cache error: {e}")
-
-def check_news():
-    global last_news_title
-    rss_feeds = [
-        "https://feeds.reuters.com/reuters/businessNews",
-        "https://feeds.bloomberg.com/markets/news.rss",
-    ]
-    try:
-        for feed_url in rss_feeds:
-            try:
-                resp = requests.get(
-                    feed_url, timeout=8,
-                    headers={"User-Agent": "Mozilla/5.0"}
-                )
-                root = ET.fromstring(resp.content)
-                for item in root.iter("item"):
-                    title = item.find("title")
-                    if title is not None and title.text:
-                        t = title.text.lower()
-                        if title.text == last_news_title:
-                            return
-                        all_kw = GOLD_BULLISH + GOLD_BEARISH + BULLISH_NEWS + BEARISH_NEWS
-                        for kw in all_kw:
-                            if kw in t:
-                                last_news_title = title.text
-                                for gk in GOLD_BULLISH:
-                                    if gk in t:
-                                        send_news_signal(
-                                            title.text, "LONG",
-                                            "XAU/USD (Gold)",
-                                            "War/Crisis/Inflation = Gold pumps 🚀"
-                                        )
-                                        return
-                                for gk in GOLD_BEARISH:
-                                    if gk in t:
-                                        send_news_signal(
-                                            title.text, "SHORT",
-                                            "XAU/USD (Gold)",
-                                            "Strong Dollar/Rate Hike = Gold dumps 📉"
-                                        )
-                                        return
-                                for bk in BULLISH_NEWS:
-                                    if bk in t:
-                                        send_news_signal(
-                                            title.text, "LONG",
-                                            "GBP/USD & EUR/USD",
-                                            "Dollar weakness expected 📉"
-                                        )
-                                        return
-                                for bk in BEARISH_NEWS:
-                                    if bk in t:
-                                        send_news_signal(
-                                            title.text, "SHORT",
-                                            "GBP/USD & EUR/USD",
-                                            "Dollar strength expected 📈"
-                                        )
-                                        return
-            except:
-                continue
-    except Exception as e:
-        print(f"News error: {e}")
-
-def news_monitor():
-    # Start pe pehle news cache karo — purani news pe signal nahi
-    print("📰 News cache ho rahi hai — 2 min wait...")
-    cache_news()
-    time.sleep(120)
-    print("✅ News cache complete — monitoring shuru!")
-    while True:
-        check_news()
-        time.sleep(60)
 
 def get_candles(exchange, symbol, timeframe="15m", limit=200):
     try:
@@ -303,13 +138,20 @@ def analyze(exchange, symbol, exchange_name):
                    df["open"].iloc[-1]  > df["close"].iloc[-2] and
                    df["close"].iloc[-1] < df["open"].iloc[-1])
 
+    # ATR based SL/TP — exact prices
     atr       = (df["high"] - df["low"]).rolling(14).mean().iloc[-1]
-    sl_long   = round(close - atr * 2.0, 5)
-    tp1_long  = round(close + atr * 2.5, 5)
-    tp2_long  = round(close + atr * 4.5, 5)
-    sl_short  = round(close + atr * 2.0, 5)
-    tp1_short = round(close - atr * 2.5, 5)
-    tp2_short = round(close - atr * 4.5, 5)
+
+    # LONG prices
+    entry_long = round(close, 5)
+    sl_long    = round(close - atr * 2.0, 5)
+    tp1_long   = round(close + atr * 2.5, 5)
+    tp2_long   = round(close + atr * 4.5, 5)
+
+    # SHORT prices
+    entry_short = round(close, 5)
+    sl_short    = round(close + atr * 2.0, 5)
+    tp1_short   = round(close - atr * 2.5, 5)
+    tp2_short   = round(close - atr * 4.5, 5)
 
     long_score   = 0
     long_reasons = []
@@ -364,35 +206,35 @@ def analyze(exchange, symbol, exchange_name):
 
     if long_score >= 10 and htf_bias == "BULLISH" and not bear_bos:
         msg = (
-            f"🟢 *{symbol} — LONG*\n"
-            f"📊 {exchange_name} | 15M+1H\n\n"
-            f"📍 Entry: `{round(close,5)}`\n"
-            f"🛡 SL: `{sl_long}`\n"
-            f"🎯 TP1: `{tp1_long}`\n"
-            f"🎯 TP2: `{tp2_long}`\n"
-            f"⚖️ R:R: `1:2.5`\n\n"
+            f"🟢 *{symbol} — BUY*\n"
+            f"📊 {exchange_name} | 15M + 1H\n\n"
+            f"📍 Entry:  `{entry_long}`\n"
+            f"🛡 SL:     `{sl_long}`\n"
+            f"🎯 TP1:    `{tp1_long}`\n"
+            f"🎯 TP2:    `{tp2_long}`\n"
+            f"⚖️ R:R:    `1:2.5`\n\n"
             f"{get_confidence(long_score)} | Score: {long_score}/15\n\n"
-            f"📌 *Confirmations:*\n" + "\n".join(long_reasons) + "\n\n"
+            f"📌 *ICT Confirmations:*\n" + "\n".join(long_reasons) + "\n\n"
             f"⏰ {pkt_time()}"
         )
         send_telegram(msg)
-        print(f"🟢 LONG: {symbol} | {long_score}/15")
+        print(f"🟢 BUY: {symbol} | Entry:{entry_long} SL:{sl_long} TP1:{tp1_long} | {long_score}/15")
 
     elif short_score >= 10 and htf_bias == "BEARISH" and not bull_bos:
         msg = (
-            f"🔴 *{symbol} — SHORT*\n"
-            f"📊 {exchange_name} | 15M+1H\n\n"
-            f"📍 Entry: `{round(close,5)}`\n"
-            f"🛡 SL: `{sl_short}`\n"
-            f"🎯 TP1: `{tp1_short}`\n"
-            f"🎯 TP2: `{tp2_short}`\n"
-            f"⚖️ R:R: `1:2.5`\n\n"
+            f"🔴 *{symbol} — SELL*\n"
+            f"📊 {exchange_name} | 15M + 1H\n\n"
+            f"📍 Entry:  `{entry_short}`\n"
+            f"🛡 SL:     `{sl_short}`\n"
+            f"🎯 TP1:    `{tp1_short}`\n"
+            f"🎯 TP2:    `{tp2_short}`\n"
+            f"⚖️ R:R:    `1:2.5`\n\n"
             f"{get_confidence(short_score)} | Score: {short_score}/15\n\n"
-            f"📌 *Confirmations:*\n" + "\n".join(short_reasons) + "\n\n"
+            f"📌 *ICT Confirmations:*\n" + "\n".join(short_reasons) + "\n\n"
             f"⏰ {pkt_time()}"
         )
         send_telegram(msg)
-        print(f"🔴 SHORT: {symbol} | {short_score}/15")
+        print(f"🔴 SELL: {symbol} | Entry:{entry_short} SL:{sl_short} TP1:{tp1_short} | {short_score}/15")
     else:
         print(f"No signal: {symbol} | L:{long_score} S:{short_score} | RSI:{rsi:.1f}")
 
@@ -410,10 +252,9 @@ def run_bot():
         "📊 5 Exchanges\n"
         "⏱ Scan: har 12 seconds\n"
         "🎯 Score 10+ pe signal\n"
-        "📰 News = Trade signal!\n"
         "📉 RSI Oversold: 20-30\n"
         "📈 RSI Overbought: 70-80\n"
-        "⚖️ R:R 1:2.5 — 1:3\n"
+        "⚖️ R:R 1:2.5\n"
         "🕐 Pakistan Time\n\n"
         "Signals ka wait karo 📡"
     )
@@ -440,10 +281,6 @@ def run_bot():
 @app.route("/")
 def home():
     return "ICT Signal Bot chal raha hai ✅"
-
-news_thread = threading.Thread(target=news_monitor)
-news_thread.daemon = True
-news_thread.start()
 
 bot_thread = threading.Thread(target=run_bot)
 bot_thread.daemon = True
